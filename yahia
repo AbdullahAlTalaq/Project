@@ -1,0 +1,45 @@
+import requests
+
+tenant_id = 'your-tenant-id'
+client_id = 'your-client-id'
+client_secret = 'your-client-secret'
+scope = 'https://graph.microsoft.com/.default'
+
+# Get access token
+token_url = f'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
+token_data = {
+    'grant_type': 'client_credentials',
+    'client_id': client_id,
+    'client_secret': client_secret,
+    'scope': scope,
+}
+
+response = requests.post(token_url, data=token_data)
+access_token = response.json().get('access_token')
+
+# Use access token to send email via Microsoft Graph API
+email_url = 'https://graph.microsoft.com/v1.0/me/sendMail'
+headers = {
+    'Authorization': f'Bearer {access_token}',
+    'Content-Type': 'application/json',
+}
+
+email_data = {
+    "message": {
+        "subject": "Test email",
+        "body": {
+            "contentType": "Text",
+            "content": "This is a test email."
+        },
+        "toRecipients": [
+            {
+                "emailAddress": {
+                    "address": "recipient@example.com"
+                }
+            }
+        ]
+    }
+}
+
+email_response = requests.post(email_url, headers=headers, json=email_data)
+print(email_response.status_code)
