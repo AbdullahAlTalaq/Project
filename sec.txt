@@ -1,0 +1,331 @@
+!pip install inference-sdk
+
+from inference_sdk import InferenceHTTPClient
+
+CLIENT = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key="D3Xlf1qhYUAr4LQ84DbN"
+)
+
+result = CLIENT.infer('/content/download.png', model_id="football-players-detection-3zvbc/11")
+
+
+
+import cv2
+import supervision as sv
+image = cv2.imread('/content/download.png')
+detections = sv.Detections.from_inference(result)
+
+
+
+BALL_ID = 0
+
+ellipse_annotator = sv.EllipseAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    thickness=2
+)
+triangle_annotator = sv.TriangleAnnotator(
+    color=sv.Color.from_hex('#FFD700'),
+    base=25,
+    height=21,
+    outline_thickness=1
+)
+
+label_annotator = sv.LabelAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    text_color=sv.Color.from_hex('#000000'),
+    text_position=sv.Position.BOTTOM_CENTER
+)
+tracker = sv.ByteTrack()
+tracker.reset()
+
+
+ball_detections = detections[detections.class_id == BALL_ID]
+ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
+all_detections = detections[detections.class_id != BALL_ID]
+all_detections = all_detections.with_nms(threshold=0.5, class_agnostic=True)
+all_detections.class_id -= 1
+all_detections = tracker.update_with_detections(detections=all_detections)
+labels = [
+    f"#{tracker_id}"
+    for tracker_id
+    in all_detections.tracker_id
+]
+
+
+annotated_frame = image.copy()
+
+annotated_frame = ellipse_annotator.annotate(
+    scene=annotated_frame,
+    detections=all_detections)
+
+annotated_frame = triangle_annotator.annotate(
+    scene=annotated_frame,
+    detections=ball_detections)
+
+
+sv.plot_image(annotated_frame)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from inference_sdk import InferenceHTTPClient
+import cv2
+import supervision as sv
+import os
+import time
+
+# Initialize Roboflow client
+CLIENT = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key="D3Xlf1qhYUAr4LQ84DbN"
+)
+
+# Set up annotators and tracker
+BALL_ID = 0
+ellipse_annotator = sv.EllipseAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    thickness=2
+)
+triangle_annotator = sv.TriangleAnnotator(
+    color=sv.Color.from_hex('#FFD700'),
+    base=25,
+    height=21,
+    outline_thickness=1
+)
+label_annotator = sv.LabelAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    text_color=sv.Color.from_hex('#000000'),
+    text_position=sv.Position.BOTTOM_CENTER
+)
+tracker = sv.ByteTrack()
+
+# Input/output paths
+video_path = "/content/0bfacc_0.mp4"
+output_path = "/content/output.mp4"
+
+# OpenCV video setup
+cap = cv2.VideoCapture(video_path)
+fps = cap.get(cv2.CAP_PROP_FPS)
+w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+
+frame_count = 0
+tracker.reset()
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Save temp frame for inference
+    temp_path = "/content/temp_frame.png"
+    cv2.imwrite(temp_path, frame)
+
+    # Inference
+    result = CLIENT.infer(temp_path, model_id="football-players-detection-3zvbc/11")
+    detections = sv.Detections.from_inference(result)
+
+    # Ball & player separation
+    ball_detections = detections[detections.class_id == BALL_ID]
+    ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
+
+    all_detections = detections[detections.class_id != BALL_ID]
+    all_detections = all_detections.with_nms(threshold=0.5, class_agnostic=True)
+    all_detections.class_id -= 1
+    all_detections = tracker.update_with_detections(detections=all_detections)
+
+    # Annotation
+    annotated = frame.copy()
+    annotated = ellipse_annotator.annotate(scene=annotated, detections=all_detections)
+    annotated = triangle_annotator.annotate(scene=annotated, detections=ball_detections)
+    out.write(annotated)
+
+    frame_count += 1
+    print(f"Processed frame {frame_count}")
+    time.sleep(1)
+
+cap.release()
+out.release()
+os.remove(temp_path)
+print(f"Saved annotated video to: {output_path}")
+
+
+
+
+
+
+
+
+
+!git clone https://github.com/roboflow/sports.git
+!pip install umap-learn scikit-learn torch torchvision
+
+import sys
+sys.path.append('/content/sports')
+
+from sports.common.team import TeamClassifier
+
+
+
+
+
+
+
+
+from inference_sdk import InferenceHTTPClient
+import cv2
+import supervision as sv
+from sports.common.team import TeamClassifier
+import os
+import time
+import numpy as np
+from tqdm import tqdm
+
+# --- Constants ---
+BALL_ID = 0
+GOALKEEPER_ID = 1
+PLAYER_ID = 2
+REFEREE_ID = 3
+STRIDE = 30
+
+# --- Roboflow API Client ---
+CLIENT = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key="D3Xlf1qhYUAr4LQ84DbN"
+)
+
+# --- Video Setup ---
+video_path = "/content/0bfacc_0.mp4"
+output_path = "/content/output1.mp4"
+cap = cv2.VideoCapture(video_path)
+fps = cap.get(cv2.CAP_PROP_FPS)
+w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+
+# --- Annotators & Tracker ---
+ellipse_annotator = sv.EllipseAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    thickness=2
+)
+triangle_annotator = sv.TriangleAnnotator(
+    color=sv.Color.from_hex('#FFD700'),
+    base=25,
+    height=21,
+    outline_thickness=1
+)
+label_annotator = sv.LabelAnnotator(
+    color=sv.ColorPalette.from_hex(['#00BFFF', '#FF1493', '#FFD700']),
+    text_color=sv.Color.from_hex('#000000'),
+    text_position=sv.Position.BOTTOM_CENTER
+)
+tracker = sv.ByteTrack()
+tracker.reset()
+
+# --- Step 1: Collect Player Crops ---
+frame_generator = sv.get_video_frames_generator(video_path, stride=STRIDE)
+crops = []
+
+print("Collecting player crops for team classification...")
+for frame in tqdm(frame_generator, desc="Collecting crops"):
+    result = CLIENT.infer(frame, model_id="football-players-detection-3zvbc/11")
+    detections = sv.Detections.from_inference(result)
+    players = detections[detections.class_id == PLAYER_ID]
+    players_crops = [sv.crop_image(frame, xyxy) for xyxy in players.xyxy]
+    crops += players_crops
+
+# --- Step 2: Train Team Classifier ---
+team_classifier = TeamClassifier(device="cpu")
+team_classifier.fit(crops)
+
+# --- Step 3: Process Video Frame-by-Frame ---
+frame_count = 0
+cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+def resolve_goalkeepers_team_id(players, goalkeepers):
+    goalkeepers_xy = goalkeepers.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+    players_xy = players.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
+    team_0_centroid = players_xy[players.class_id == 0].mean(axis=0)
+    team_1_centroid = players_xy[players.class_id == 1].mean(axis=0)
+    result = []
+    for gk_xy in goalkeepers_xy:
+        dist_0 = np.linalg.norm(gk_xy - team_0_centroid)
+        dist_1 = np.linalg.norm(gk_xy - team_1_centroid)
+        result.append(0 if dist_0 < dist_1 else 1)
+    return np.array(result)
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    temp_path = "/content/temp_frame.png"
+    cv2.imwrite(temp_path, frame)
+
+    result = CLIENT.infer(temp_path, model_id="football-players-detection-3zvbc/11")
+    detections = sv.Detections.from_inference(result)
+
+    # Ball
+    ball_detections = detections[detections.class_id == BALL_ID]
+    ball_detections.xyxy = sv.pad_boxes(xyxy=ball_detections.xyxy, px=10)
+
+    # All other
+    others = detections[detections.class_id != BALL_ID]
+    others = others.with_nms(threshold=0.5, class_agnostic=True)
+    others = tracker.update_with_detections(detections=others)
+
+    # Split by role
+    goalkeepers = others[others.class_id == GOALKEEPER_ID]
+    players = others[others.class_id == PLAYER_ID]
+    referees = others[others.class_id == REFEREE_ID]
+
+    # Predict teams for players
+    player_crops = [sv.crop_image(frame, xyxy) for xyxy in players.xyxy]
+    players.class_id = team_classifier.predict(player_crops)
+
+    # Assign team to goalkeepers
+    goalkeepers.class_id = resolve_goalkeepers_team_id(players, goalkeepers)
+
+    # Mark referees with neutral class (e.g., -1 -> 2 for yellow)
+    referees.class_id = np.full_like(referees.class_id, 2)
+
+    # Merge all
+    all_detections = sv.Detections.merge([players, goalkeepers, referees])
+    labels = [f"#{id}" for id in all_detections.tracker_id]
+    all_detections.class_id = all_detections.class_id.astype(int)
+
+    # Annotate
+    annotated = frame.copy()
+    annotated = ellipse_annotator.annotate(scene=annotated, detections=all_detections)
+    annotated = label_annotator.annotate(scene=annotated, detections=all_detections, labels=labels)
+    annotated = triangle_annotator.annotate(scene=annotated, detections=ball_detections)
+
+    out.write(annotated)
+    frame_count += 1
+    print(f"Processed frame {frame_count}")
+    time.sleep(1)
+
+cap.release()
+out.release()
+os.remove(temp_path)
+print(f"Saved annotated video to: {output_path}")
+
+
+
